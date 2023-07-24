@@ -9,7 +9,11 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "devDependencies": {
+    "serverless-iam-roles-per-function": "^3.1.0"
+  },
   "dependencies": {
     "aws-sdk": "^2.1416.0"
   }
+  
 }
