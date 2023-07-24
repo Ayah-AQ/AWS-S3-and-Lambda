@@ -1,47 +1,60 @@
 'use strict';
-
 const AWS = require('aws-sdk');
 const s3 = new AWS.S3();
 
-exports.handler = async (event) => {
-  const record = event.Records[0].s3;
-  const bucketName = record.bucket.name;
-  const file = record.object;
-
-  const parameters = {
-    Bucket: bucketName,
-    Key: 'images.json'
-  };
-  
-  const uploadParameters = {
-    Body: '',
-    ContentType: 'application/json',
-    Bucket: bucketName,
-    Key: 'images.json'
-  };
-
-  const uploadImage = async () => {
-    await new Promise((resolve, reject) => {
-      s3.putObject(uploadParameters, (err, result) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(result);
-        }
-      });
-    });
-  };
-
+exports.handler = async (event, context) => {
   try {
-    const getObjectResponse = await s3.getObject(parameters).promise();
-    const existingData = JSON.parse(getObjectResponse.Body.toString());
+    const bucket = event.Records[0].s3.bucket.name;
+    const key = event.Records[0].s3.object.key;
+    const size = event.Records[0].s3.object.size;
 
-    const newData = [...existingData, file];
-    uploadParameters.Body = JSON.stringify(newData);
+    let imagesData;
+    try {
+      const response = await s3.getObject({ Bucket: bucket, Key: 'images.json' }).promise();
+      imagesData = JSON.parse(response.Body.toString());
+    } catch (error) {
+      if (error.code === 'NoSuchKey') {
+        imagesData = [];
+      } else {
+        throw error;
+      }
+    }
+
+    let imageExists = false;
+    for (const image of imagesData) {
+      if (image.name === key) {
+        image.size = size;
+        imageExists = true;
+        break;
+      }
+    }
+
+    if (!imageExists) {
+      const imageData = {
+        name: key,
+        size: size,
+      };
+      imagesData.push(imageData);
+    }
+
+    await s3
+      .putObject({
+        Bucket: bucket,
+        Key: 'images.json',
+        Body: JSON.stringify(imagesData),
+        ContentType: 'application/json',
+      })
+      .promise();
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify('Image processed successfully.'),
+    };
   } catch (error) {
-    console.log(error);
-    uploadParameters.Body = JSON.stringify([file]);
+    console.error('Error:', error);
+    return {
+      statusCode: 500,
+      body: JSON.stringify('Error processing the image.'),
+    };
   }
-
-  await uploadImage();
 };
